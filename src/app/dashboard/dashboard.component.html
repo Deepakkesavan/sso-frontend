@@ -14,8 +14,8 @@
     
     <div *ngIf="!loading && user">
       <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-        <h3>Welcome, {{ user.name || 'User' }}!</h3>
-        <p *ngIf="user.email"><strong>Email:</strong> {{ user.email }}</p>
+        <h3>Welcome, {{ user.user.name || 'User' }}!</h3>
+        <p *ngIf="user.user.email"><strong>Email:</strong> {{ user.user.email }}</p>
         <!-- <p *ngIf="user.sub"><strong>Subject ID:</strong> {{ user.sub }}</p> -->
       </div>
       

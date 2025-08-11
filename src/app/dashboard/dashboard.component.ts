@@ -30,15 +30,22 @@ export class DashboardComponent implements OnInit{
     });
   }
   logout(): void {
-    this.authService.logout().subscribe({
-      next: () => {
-        this.authService.checkAuthStatus(); // Refresh auth status
-        this.router.navigate(['/login']);
+    this.loading = true;
+    
+    this.authService.logoutComplete().subscribe({
+      next: (response) => {
+        console.log('Logout successful:', response);
+        // Navigate to login and force page refresh
+        this.router.navigate(['/login']).then(() => {
+          window.location.href = '/login';
+        });
       },
       error: (error) => {
         console.error('Logout error:', error);
-        // Still redirect to login even if logout fails
-        this.router.navigate(['/login']);
+        // Still redirect even if server logout failed
+        this.router.navigate(['/login']).then(() => {
+          window.location.href = '/login';
+        });
       }
     });
   }
