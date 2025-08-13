@@ -32,6 +32,8 @@ export class AuthServiceService {
   }
 
   login(): void {
+    // Clear any existing state before OAuth2 login
+    this.clearAuth();
     // Redirect to Spring Boot OAuth2 login endpoint
     window.location.href = 'http://localhost:8080/oauth2/authorization/azure';
   }
@@ -43,16 +45,19 @@ export class AuthServiceService {
       password: password
     };
 
+    // Clear any existing authentication state before login
+    this.clearAuth();
+
     return this.http.post(`${this.customLoginUrl}/signin`, loginData, { 
       withCredentials: true,
       observe: 'response'
     }).pipe(
       tap((response) => {
         console.log('Custom login successful:', response);
-        // Force a delay to ensure cookie is set before checking auth status
+        // Force a delay to ensure cookie is set and any previous auth is cleared
         setTimeout(() => {
           this.checkAuthStatus();
-        }, 100);
+        }, 200);
       }),
       catchError((error) => {
         console.error('Custom login failed:', error);
@@ -81,11 +86,13 @@ export class AuthServiceService {
     
     // Determine logout endpoint based on current user type
     const currentUser = this.userSubject.value;
-    const isJwtUser = currentUser && !currentUser.user?.id?.includes('oauth'); // Simple check
+    const isJwtUser = currentUser && currentUser.user && !currentUser.user.givenName; // JWT users don't have givenName
     
     const logoutUrl = isJwtUser ? 
       `${this.customLoginUrl}/logout` : 
       `${this.apiUrl}/logout`;
+    
+    console.log('Logging out via:', logoutUrl, 'isJwtUser:', isJwtUser);
     
     return this.http.post(logoutUrl, {}, { 
       withCredentials: true,
@@ -105,55 +112,61 @@ export class AuthServiceService {
     );
   }
 
-  // Alternative logout method that tries multiple endpoints
+  // Enhanced logout method that tries multiple endpoints and clears everything
   logoutComplete(): Observable<any> {
     // Clear state immediately
-    this.userSubject.next({ authenticated: false });
+    this.clearAuth();
     
-    // Try both JWT and OAuth2 logout endpoints
-    const jwtLogout = this.http.post(`${this.customLoginUrl}/logout`, {}, { 
+    // Try comprehensive logout
+    const comprehensiveLogout = this.http.post(`${this.apiUrl}/logout`, {}, { 
       withCredentials: true,
       observe: 'response',
       responseType: 'json'
     });
     
-    const apiLogout = this.http.post(`${this.apiUrl}/logout`, {}, { 
-      withCredentials: true,
-      observe: 'response',
-      responseType: 'json'
-    });
-    
-    const springLogout = this.http.post('http://localhost:8080/logout', {}, { 
-      withCredentials: true,
-      observe: 'response',
-      responseType: 'json'
-    });
-    
-    // Try JWT logout first, then API logout, then Spring logout
-    return jwtLogout.pipe(
+    return comprehensiveLogout.pipe(
       catchError(() => {
-        console.log('JWT logout failed, trying API logout...');
-        return apiLogout;
+        console.log('API logout failed, trying JWT logout...');
+        return this.http.post(`${this.customLoginUrl}/logout`, {}, { 
+          withCredentials: true,
+          observe: 'response',
+          responseType: 'json'
+        });
       }),
       catchError(() => {
-        console.log('API logout failed, trying Spring logout...');
-        return springLogout;
+        console.log('JWT logout failed, trying Spring logout...');
+        return this.http.post('http://localhost:8080/logout', {}, { 
+          withCredentials: true,
+          observe: 'response',
+          responseType: 'json'
+        });
       }),
       catchError((error) => {
         console.error('All logout attempts failed:', error);
-        // Still return success since we cleared the client state
         return of({ message: 'Logout completed (client-side cleared)' });
       }),
       tap(() => {
         // Final cleanup
-        this.userSubject.next({ authenticated: false });
+        this.clearAuth();
+        // Clear any cached data
+        this.clearBrowserCache();
       })
     );
   }
 
-  // Force clear authentication state
+  // Force clear authentication state and browser cache
   clearAuth(): void {
     this.userSubject.next({ authenticated: false });
+  }
+
+  // Clear browser cache/cookies
+  private clearBrowserCache(): void {
+    // Clear all cookies for the current domain
+    document.cookie.split(";").forEach((c) => {
+      const eqPos = c.indexOf("=");
+      const name = eqPos > -1 ? c.substr(0, eqPos) : c;
+      document.cookie = name.trim() + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+    });
   }
 
   isAuthenticated(): boolean {
