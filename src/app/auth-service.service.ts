@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Observable, BehaviorSubject } from 'rxjs';
 import { tap, catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
@@ -21,10 +21,11 @@ export class AuthServiceService {
     this.http.get(`${this.apiUrl}/user-attributes`, { withCredentials: true })
       .subscribe({
         next: (user) => {
+          console.log('Auth status check - authenticated:', user);
           this.userSubject.next(user);
         },
-        error: (error) => {
-          console.log('Not authenticated:', error);
+        error: (error: HttpErrorResponse) => {
+          console.log('Auth status check - not authenticated:', error.status);
           this.userSubject.next({ authenticated: false });
         }
       });
@@ -48,8 +49,10 @@ export class AuthServiceService {
     }).pipe(
       tap((response) => {
         console.log('Custom login successful:', response);
-        // Update authentication status after successful login
-        this.checkAuthStatus();
+        // Force a delay to ensure cookie is set before checking auth status
+        setTimeout(() => {
+          this.checkAuthStatus();
+        }, 100);
       }),
       catchError((error) => {
         console.error('Custom login failed:', error);
@@ -76,14 +79,21 @@ export class AuthServiceService {
     // Clear user state immediately
     this.userSubject.next({ authenticated: false });
     
-    // Make logout request with proper credentials
-    return this.http.post(`${this.apiUrl}/logout`, {}, { 
+    // Determine logout endpoint based on current user type
+    const currentUser = this.userSubject.value;
+    const isJwtUser = currentUser && !currentUser.user?.id?.includes('oauth'); // Simple check
+    
+    const logoutUrl = isJwtUser ? 
+      `${this.customLoginUrl}/logout` : 
+      `${this.apiUrl}/logout`;
+    
+    return this.http.post(logoutUrl, {}, { 
       withCredentials: true,
       observe: 'response',
       responseType: 'json'
     }).pipe(
-      tap(() => {
-        // Ensure user state is cleared after successful logout
+      tap((response) => {
+        console.log('Logout successful:', response);
         this.userSubject.next({ authenticated: false });
       }),
       catchError((error) => {
@@ -100,22 +110,31 @@ export class AuthServiceService {
     // Clear state immediately
     this.userSubject.next({ authenticated: false });
     
-    // Try the API logout endpoint first
+    // Try both JWT and OAuth2 logout endpoints
+    const jwtLogout = this.http.post(`${this.customLoginUrl}/logout`, {}, { 
+      withCredentials: true,
+      observe: 'response',
+      responseType: 'json'
+    });
+    
     const apiLogout = this.http.post(`${this.apiUrl}/logout`, {}, { 
       withCredentials: true,
       observe: 'response',
       responseType: 'json'
     });
     
-    // Fallback to Spring Security default logout endpoint
     const springLogout = this.http.post('http://localhost:8080/logout', {}, { 
       withCredentials: true,
       observe: 'response',
       responseType: 'json'
     });
     
-    // Try API logout first, fallback to Spring logout if it fails
-    return apiLogout.pipe(
+    // Try JWT logout first, then API logout, then Spring logout
+    return jwtLogout.pipe(
+      catchError(() => {
+        console.log('JWT logout failed, trying API logout...');
+        return apiLogout;
+      }),
       catchError(() => {
         console.log('API logout failed, trying Spring logout...');
         return springLogout;
@@ -124,6 +143,10 @@ export class AuthServiceService {
         console.error('All logout attempts failed:', error);
         // Still return success since we cleared the client state
         return of({ message: 'Logout completed (client-side cleared)' });
+      }),
+      tap(() => {
+        // Final cleanup
+        this.userSubject.next({ authenticated: false });
       })
     );
   }

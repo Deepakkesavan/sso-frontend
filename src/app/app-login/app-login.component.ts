@@ -1,8 +1,9 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthServiceService } from '../auth-service.service';
 import { Router } from '@angular/router';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-app-login',
@@ -10,11 +11,12 @@ import { Router } from '@angular/router';
   templateUrl: './app-login.component.html',
   styleUrl: './app-login.component.css'
 })
-export class AppLoginComponent implements OnInit {
+export class AppLoginComponent implements OnInit, OnDestroy {
   errorMessage: string = '';
   loading: boolean = true;
   isAuthenticated: boolean = false;
   customLoginLoading: boolean = false;
+  private subscription: Subscription = new Subscription();
   
   loginData = {
     username: '',
@@ -34,15 +36,30 @@ export class AppLoginComponent implements OnInit {
     }
 
     // Subscribe to authentication status
-    this.authService.user$.subscribe(user => {
-      this.loading = false;
-      this.isAuthenticated = user && user.authenticated === true;
-      
-      // If authenticated, redirect to dashboard
-      if (this.isAuthenticated) {
-        this.router.navigate(['/dashboard']);
+    const authSub = this.authService.user$.subscribe({
+      next: (user) => {
+        console.log('Login component - user status:', user);
+        this.loading = false;
+        this.isAuthenticated = user && user.authenticated === true;
+        
+        // If authenticated, redirect to dashboard
+        if (this.isAuthenticated) {
+          console.log('User is authenticated, redirecting to dashboard');
+          this.router.navigate(['/dashboard']);
+        }
+      },
+      error: (error) => {
+        console.error('Auth subscription error:', error);
+        this.loading = false;
+        this.isAuthenticated = false;
       }
     });
+    
+    this.subscription.add(authSub);
+  }
+
+  ngOnDestroy(): void {
+    this.subscription.unsubscribe();
   }
 
   login(): void {
@@ -58,13 +75,15 @@ export class AppLoginComponent implements OnInit {
     this.customLoginLoading = true;
     this.errorMessage = '';
 
-    this.authService.customLogin(this.loginData.username, this.loginData.password).subscribe({
+    const loginSub = this.authService.customLogin(this.loginData.username, this.loginData.password).subscribe({
       next: (response) => {
         this.customLoginLoading = false;
         console.log('Login successful:', response);
-        // Refresh auth status after successful login
-        this.authService.checkAuthStatus();
-        this.router.navigate(['/dashboard']);
+        
+        // Give a small delay to ensure authentication status is updated
+        setTimeout(() => {
+          this.router.navigate(['/dashboard']);
+        }, 200);
       },
       error: (error) => {
         this.customLoginLoading = false;
@@ -72,7 +91,7 @@ export class AppLoginComponent implements OnInit {
         
         if (error.status === 404) {
           this.errorMessage = 'User not found. Please sign up first.';
-        } else if (error.status === 401) {
+        } else if (error.status === 401 || error.status === 403) {
           this.errorMessage = 'Invalid credentials. Please try again.';
         } else if (error.error && error.error.error) {
           this.errorMessage = error.error.error;
@@ -81,6 +100,8 @@ export class AppLoginComponent implements OnInit {
         }
       }
     });
+    
+    this.subscription.add(loginSub);
   }
 
   goToSignup(): void {
