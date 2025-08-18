@@ -32,10 +32,15 @@ export class AuthServiceService {
   }
 
   login(): void {
-    // Clear any existing state before OAuth2 login
+    // Clear any existing state and cookies before OAuth2 login
     this.clearAuth();
-    // Redirect to Spring Boot OAuth2 login endpoint
-    window.location.href = 'http://localhost:8080/oauth2/authorization/azure';
+    this.clearBrowserCache();
+    
+    // Small delay to ensure cleanup is complete
+    setTimeout(() => {
+      // Redirect to Spring Boot OAuth2 login endpoint
+      window.location.href = 'http://localhost:8080/oauth2/authorization/azure';
+    }, 100);
   }
 
   // Custom login with username/password
@@ -114,28 +119,31 @@ export class AuthServiceService {
 
   // Enhanced logout method that tries multiple endpoints and clears everything
   logoutComplete(): Observable<any> {
+    console.log('Starting complete logout process...');
+    
     // Clear state immediately
     this.clearAuth();
+    this.clearAllBrowserData();
     
-    // Try comprehensive logout
-    const comprehensiveLogout = this.http.post(`${this.apiUrl}/logout`, {}, { 
+    // Try global logout endpoint first (most comprehensive)
+    const globalLogout = this.http.post('http://localhost:8080/logout', {}, { 
       withCredentials: true,
       observe: 'response',
       responseType: 'json'
     });
     
-    return comprehensiveLogout.pipe(
+    return globalLogout.pipe(
       catchError(() => {
-        console.log('API logout failed, trying JWT logout...');
-        return this.http.post(`${this.customLoginUrl}/logout`, {}, { 
+        console.log('Global logout failed, trying API logout...');
+        return this.http.post(`${this.apiUrl}/logout`, {}, { 
           withCredentials: true,
           observe: 'response',
           responseType: 'json'
         });
       }),
       catchError(() => {
-        console.log('JWT logout failed, trying Spring logout...');
-        return this.http.post('http://localhost:8080/logout', {}, { 
+        console.log('API logout failed, trying JWT logout...');
+        return this.http.post(`${this.customLoginUrl}/logout`, {}, { 
           withCredentials: true,
           observe: 'response',
           responseType: 'json'
@@ -145,13 +153,59 @@ export class AuthServiceService {
         console.error('All logout attempts failed:', error);
         return of({ message: 'Logout completed (client-side cleared)' });
       }),
-      tap(() => {
+      tap((response) => {
+        console.log('Logout response:', response);
         // Final cleanup
-        this.clearAuth();
-        // Clear any cached data
-        this.clearBrowserCache();
+        this.performFinalCleanup();
       })
     );
+  }
+
+  // Comprehensive browser data clearing
+  private clearAllBrowserData(): void {
+    console.log('Clearing all browser data...');
+    
+    // Clear cookies
+    this.clearBrowserCache();
+    
+    // Clear local storage
+    try {
+      localStorage.clear();
+      console.log('Local storage cleared');
+    } catch (e) {
+      console.error('Error clearing local storage:', e);
+    }
+    
+    // Clear session storage
+    try {
+      sessionStorage.clear();
+      console.log('Session storage cleared');
+    } catch (e) {
+      console.error('Error clearing session storage:', e);
+    }
+    
+    // Clear any cached data
+    if ('caches' in window) {
+      caches.keys().then(names => {
+        names.forEach(name => {
+          caches.delete(name);
+        });
+      });
+    }
+  }
+
+  // Perform final cleanup
+  private performFinalCleanup(): void {
+    console.log('Performing final cleanup...');
+    
+    // Clear authentication state again
+    this.clearAuth();
+    
+    // Clear all browser data again
+    this.clearAllBrowserData();
+    
+    // Clear any Angular HTTP cache
+    // (this would depend on your HTTP interceptors if any)
   }
 
   // Force clear authentication state and browser cache
@@ -161,7 +215,15 @@ export class AuthServiceService {
 
   // Clear browser cache/cookies
   private clearBrowserCache(): void {
-    // Clear all cookies for the current domain
+    // Clear specific cookies that might interfere
+    const cookiesToClear = ['jwt', 'JSESSIONID', 'XSRF-TOKEN'];
+    
+    cookiesToClear.forEach(cookieName => {
+      document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+      document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=localhost`;
+    });
+    
+    // Also clear all cookies as fallback
     document.cookie.split(";").forEach((c) => {
       const eqPos = c.indexOf("=");
       const name = eqPos > -1 ? c.substr(0, eqPos) : c;

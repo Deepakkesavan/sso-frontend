@@ -16,15 +16,15 @@
         <h3 style="text-align: center; margin-bottom: 20px;">Custom Login</h3>
         <form (ngSubmit)="customLogin()" #loginForm="ngForm">
           <div style="margin-bottom: 15px;">
-            <label for="username" style="display: block; margin-bottom: 5px; font-weight: bold;">Username:</label>
+            <label for="email" style="display: block; margin-bottom: 5px; font-weight: bold;">Email:</label>
             <input 
               type="text" 
-              id="username"
-              name="username"
+              id="email"
+              name="email"
               [(ngModel)]="loginData.username"
               required
               style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;"
-              placeholder="Enter your username">
+              placeholder="Enter your email">
           </div>
           
           <div style="margin-bottom: 20px;">
