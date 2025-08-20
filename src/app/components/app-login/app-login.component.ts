@@ -1,28 +1,24 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { AuthServiceService } from '../auth-service.service';
 import { Router } from '@angular/router';
-import { Subscription } from 'rxjs';
-
+import { Subject, takeUntil } from 'rxjs';
+import { AuthServiceService } from '../../services/auth-service.service';
 @Component({
   selector: 'app-app-login',
   standalone: true,
   imports: [CommonModule, FormsModule],
   templateUrl: './app-login.component.html',
-  styleUrl: './app-login.component.css',
+  styleUrls: ['./app-login.component.css'],
 })
 export class AppLoginComponent implements OnInit, OnDestroy {
-  errorMessage: string = '';
-  loading: boolean = true;
-  isAuthenticated: boolean = false;
-  customLoginLoading: boolean = false;
-  private subscription: Subscription = new Subscription();
+  errorMessage = '';
+  loading = true;
+  isAuthenticated = false;
+  customLoginLoading = false;
+  loginData = { username: '', password: '' };
 
-  loginData = {
-    username: '',
-    password: '',
-  };
+  private destroy$ = new Subject<void>();
 
   constructor(
     private authService: AuthServiceService,
@@ -30,24 +26,21 @@ export class AppLoginComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    // Check for error parameter in URL
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('error')) {
+    // Set error message if error param present
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('error')) {
       this.errorMessage = 'Login failed. Please try again.';
     }
 
-    // Subscribe to authentication status
-    const authSub = this.authService.user$.subscribe({
+    // User auth subscription
+    this.authService.user$.pipe(takeUntil(this.destroy$)).subscribe({
       next: (user) => {
         console.log('Login component - user status:', user);
         this.loading = false;
-        this.isAuthenticated = user && user.authenticated === true;
+        this.isAuthenticated = !!user?.authenticated;
 
-        // If authenticated, redirect to dashboard
         if (this.isAuthenticated) {
-          console.log('User is authenticated, redirecting to dashboard');
-          this.router.navigate(['/dashboard']);
-          // window.location.href = 'http://localhost:5050/dashboard';
+          this.navigateToDashboard();
         }
       },
       error: (error) => {
@@ -56,12 +49,11 @@ export class AppLoginComponent implements OnInit, OnDestroy {
         this.isAuthenticated = false;
       },
     });
-
-    this.subscription.add(authSub);
   }
 
   ngOnDestroy(): void {
-    this.subscription.unsubscribe();
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   login(): void {
@@ -77,36 +69,30 @@ export class AppLoginComponent implements OnInit, OnDestroy {
     this.customLoginLoading = true;
     this.errorMessage = '';
 
-    const loginSub = this.authService
+    this.authService
       .customLogin(this.loginData.username, this.loginData.password)
+      .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (response) => {
           this.customLoginLoading = false;
-          console.log('Login successful:', response);
-
-          // Give a small delay to ensure authentication status is updated
-          setTimeout(() => {
-            this.router.navigate(['/dashboard']);
-            // window.location.href = 'http://localhost:5050/dashboard';
-          }, 200);
+          setTimeout(() => this.navigateToDashboard(), 200);
         },
         error: (error) => {
           this.customLoginLoading = false;
           console.error('Login failed:', error);
 
+          // Granular error logic
           if (error.status === 404) {
             this.errorMessage = 'User not found. Please sign up first.';
           } else if (error.status === 401 || error.status === 403) {
             this.errorMessage = 'Invalid credentials. Please try again.';
-          } else if (error.error && error.error.error) {
+          } else if (error.error?.error) {
             this.errorMessage = error.error.error;
           } else {
             this.errorMessage = 'Login failed. Please try again.';
           }
         },
       });
-
-    this.subscription.add(loginSub);
   }
 
   goToSignup(): void {
@@ -114,7 +100,12 @@ export class AppLoginComponent implements OnInit, OnDestroy {
   }
 
   goToDashboard(): void {
+    this.navigateToDashboard();
+  }
+
+  private navigateToDashboard(): void {
     this.router.navigate(['/dashboard']);
+    // Optionally, uncomment if you want a hard reload (discouraged in SPA)
     // window.location.href = 'http://localhost:5050/dashboard';
   }
 }
