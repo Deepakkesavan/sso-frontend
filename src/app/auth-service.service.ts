@@ -4,8 +4,15 @@ import { Observable, BehaviorSubject } from 'rxjs';
 import { tap, catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 
+interface LoginResponse {
+  message: string;
+  empId: number;
+  designation: string;
+  redirect: string;
+}
+
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class AuthServiceService {
   private apiUrl = 'http://localhost:8080/api/auth';
@@ -18,7 +25,8 @@ export class AuthServiceService {
   }
 
   checkAuthStatus(): void {
-    this.http.get(`${this.apiUrl}/user-attributes`, { withCredentials: true })
+    this.http
+      .get(`${this.apiUrl}/user-attributes`, { withCredentials: true })
       .subscribe({
         next: (user) => {
           console.log('Auth status check - authenticated:', user);
@@ -27,7 +35,7 @@ export class AuthServiceService {
         error: (error: HttpErrorResponse) => {
           console.log('Auth status check - not authenticated:', error.status);
           this.userSubject.next({ authenticated: false });
-        }
+        },
       });
   }
 
@@ -35,7 +43,7 @@ export class AuthServiceService {
     // Clear any existing state and cookies before OAuth2 login
     this.clearAuth();
     this.clearBrowserCache();
-    
+
     // Small delay to ensure cleanup is complete
     setTimeout(() => {
       // Redirect to Spring Boot OAuth2 login endpoint
@@ -47,33 +55,42 @@ export class AuthServiceService {
   customLogin(username: string, password: string): Observable<any> {
     const loginData = {
       email: username, // Backend expects email field
-      password: password
+      password: password,
     };
 
     // Clear any existing authentication state before login
     this.clearAuth();
 
-    return this.http.post(`${this.customLoginUrl}/signin`, loginData, { 
-      withCredentials: true,
-      observe: 'response'
-    }).pipe(
-      tap((response) => {
-        console.log('Custom login successful:', response);
-        // Force a delay to ensure cookie is set and any previous auth is cleared
-        setTimeout(() => {
-          this.checkAuthStatus();
-        }, 200);
-      }),
-      catchError((error) => {
-        console.error('Custom login failed:', error);
-        this.userSubject.next({ authenticated: false });
-        throw error;
+    return this.http
+      .post<LoginResponse>(`${this.customLoginUrl}/signin`, loginData, {
+        withCredentials: true,
+        observe: 'response',
       })
-    );
+      .pipe(
+        tap((response) => {
+          console.log('Custom login successful:', response);
+          // Handle redirect from response
+          const redirectUrl =
+            response.body?.redirect || 'http://localhost:5050/dashboard';
+          setTimeout(() => {
+            window.location.href = redirectUrl;
+            this.checkAuthStatus(); // Update user state after redirect
+          }, 200);
+        }),
+        catchError((error) => {
+          console.error('Custom login failed:', error);
+          this.userSubject.next({ authenticated: false });
+          throw error;
+        })
+      );
   }
 
   // Signup method
-  signup(userData: { username: string; email: string; password: string }): Observable<any> {
+  signup(userData: {
+    username: string;
+    email: string;
+    password: string;
+  }): Observable<any> {
     return this.http.post(`${this.customLoginUrl}/signup`, userData).pipe(
       tap((response) => {
         console.log('Signup successful:', response);
@@ -88,66 +105,86 @@ export class AuthServiceService {
   logout(): Observable<any> {
     // Clear user state immediately
     this.userSubject.next({ authenticated: false });
-    
+
     // Determine logout endpoint based on current user type
     const currentUser = this.userSubject.value;
-    const isJwtUser = currentUser && currentUser.user && !currentUser.user.givenName; // JWT users don't have givenName
-    
-    const logoutUrl = isJwtUser ? 
-      `${this.customLoginUrl}/logout` : 
-      `${this.apiUrl}/logout`;
-    
+    const isJwtUser =
+      currentUser && currentUser.user && !currentUser.user.givenName; // JWT users don't have givenName
+
+    const logoutUrl = isJwtUser
+      ? `${this.customLoginUrl}/logout`
+      : `${this.apiUrl}/logout`;
+
     console.log('Logging out via:', logoutUrl, 'isJwtUser:', isJwtUser);
-    
-    return this.http.post(logoutUrl, {}, { 
-      withCredentials: true,
-      observe: 'response',
-      responseType: 'json'
-    }).pipe(
-      tap((response) => {
-        console.log('Logout successful:', response);
-        this.userSubject.next({ authenticated: false });
-      }),
-      catchError((error) => {
-        console.error('Logout failed:', error);
-        // Keep user state cleared even if request fails
-        this.userSubject.next({ authenticated: false });
-        return of({ message: 'Logout completed with errors' });
-      })
-    );
+
+    return this.http
+      .post(
+        logoutUrl,
+        {},
+        {
+          withCredentials: true,
+          observe: 'response',
+          responseType: 'json',
+        }
+      )
+      .pipe(
+        tap((response) => {
+          console.log('Logout successful:', response);
+          this.userSubject.next({ authenticated: false });
+          window.location.href = 'http://localhost:5050/login'; // Redirect to login
+        }),
+        catchError((error) => {
+          console.error('Logout failed:', error);
+          this.userSubject.next({ authenticated: false });
+          window.location.href = 'http://localhost:5050/login';
+          return of({ message: 'Logout completed with errors' });
+        })
+      );
   }
 
   // Enhanced logout method that tries multiple endpoints and clears everything
   logoutComplete(): Observable<any> {
     console.log('Starting complete logout process...');
-    
+
     // Clear state immediately
     this.clearAuth();
     this.clearAllBrowserData();
-    
+
     // Try global logout endpoint first (most comprehensive)
-    const globalLogout = this.http.post('http://localhost:8080/logout', {}, { 
-      withCredentials: true,
-      observe: 'response',
-      responseType: 'json'
-    });
-    
+    const globalLogout = this.http.post(
+      'http://localhost:8080/logout',
+      {},
+      {
+        withCredentials: true,
+        observe: 'response',
+        responseType: 'json',
+      }
+    );
+
     return globalLogout.pipe(
       catchError(() => {
         console.log('Global logout failed, trying API logout...');
-        return this.http.post(`${this.apiUrl}/logout`, {}, { 
-          withCredentials: true,
-          observe: 'response',
-          responseType: 'json'
-        });
+        return this.http.post(
+          `${this.apiUrl}/logout`,
+          {},
+          {
+            withCredentials: true,
+            observe: 'response',
+            responseType: 'json',
+          }
+        );
       }),
       catchError(() => {
         console.log('API logout failed, trying JWT logout...');
-        return this.http.post(`${this.customLoginUrl}/logout`, {}, { 
-          withCredentials: true,
-          observe: 'response',
-          responseType: 'json'
-        });
+        return this.http.post(
+          `${this.customLoginUrl}/logout`,
+          {},
+          {
+            withCredentials: true,
+            observe: 'response',
+            responseType: 'json',
+          }
+        );
       }),
       catchError((error) => {
         console.error('All logout attempts failed:', error);
@@ -157,6 +194,7 @@ export class AuthServiceService {
         console.log('Logout response:', response);
         // Final cleanup
         this.performFinalCleanup();
+        window.location.href = 'http://localhost:5050/login';
       })
     );
   }
@@ -164,10 +202,10 @@ export class AuthServiceService {
   // Comprehensive browser data clearing
   private clearAllBrowserData(): void {
     console.log('Clearing all browser data...');
-    
+
     // Clear cookies
     this.clearBrowserCache();
-    
+
     // Clear local storage
     try {
       localStorage.clear();
@@ -175,7 +213,7 @@ export class AuthServiceService {
     } catch (e) {
       console.error('Error clearing local storage:', e);
     }
-    
+
     // Clear session storage
     try {
       sessionStorage.clear();
@@ -183,11 +221,11 @@ export class AuthServiceService {
     } catch (e) {
       console.error('Error clearing session storage:', e);
     }
-    
+
     // Clear any cached data
     if ('caches' in window) {
-      caches.keys().then(names => {
-        names.forEach(name => {
+      caches.keys().then((names) => {
+        names.forEach((name) => {
           caches.delete(name);
         });
       });
@@ -197,15 +235,12 @@ export class AuthServiceService {
   // Perform final cleanup
   private performFinalCleanup(): void {
     console.log('Performing final cleanup...');
-    
+
     // Clear authentication state again
     this.clearAuth();
-    
+
     // Clear all browser data again
     this.clearAllBrowserData();
-    
-    // Clear any Angular HTTP cache
-    // (this would depend on your HTTP interceptors if any)
   }
 
   // Force clear authentication state and browser cache
@@ -217,17 +252,18 @@ export class AuthServiceService {
   private clearBrowserCache(): void {
     // Clear specific cookies that might interfere
     const cookiesToClear = ['jwt', 'JSESSIONID', 'XSRF-TOKEN'];
-    
-    cookiesToClear.forEach(cookieName => {
+
+    cookiesToClear.forEach((cookieName) => {
       document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
       document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=localhost`;
     });
-    
+
     // Also clear all cookies as fallback
-    document.cookie.split(";").forEach((c) => {
-      const eqPos = c.indexOf("=");
+    document.cookie.split(';').forEach((c) => {
+      const eqPos = c.indexOf('=');
       const name = eqPos > -1 ? c.substr(0, eqPos) : c;
-      document.cookie = name.trim() + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+      document.cookie =
+        name.trim() + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
     });
   }
 

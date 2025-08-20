@@ -7,9 +7,10 @@ import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-app-login',
+  standalone: true,
   imports: [CommonModule, FormsModule],
   templateUrl: './app-login.component.html',
-  styleUrl: './app-login.component.css'
+  styleUrl: './app-login.component.css',
 })
 export class AppLoginComponent implements OnInit, OnDestroy {
   errorMessage: string = '';
@@ -17,10 +18,10 @@ export class AppLoginComponent implements OnInit, OnDestroy {
   isAuthenticated: boolean = false;
   customLoginLoading: boolean = false;
   private subscription: Subscription = new Subscription();
-  
+
   loginData = {
     username: '',
-    password: ''
+    password: '',
   };
 
   constructor(
@@ -41,20 +42,21 @@ export class AppLoginComponent implements OnInit, OnDestroy {
         console.log('Login component - user status:', user);
         this.loading = false;
         this.isAuthenticated = user && user.authenticated === true;
-        
+
         // If authenticated, redirect to dashboard
         if (this.isAuthenticated) {
           console.log('User is authenticated, redirecting to dashboard');
           this.router.navigate(['/dashboard']);
+          // window.location.href = 'http://localhost:5050/dashboard';
         }
       },
       error: (error) => {
         console.error('Auth subscription error:', error);
         this.loading = false;
         this.isAuthenticated = false;
-      }
+      },
     });
-    
+
     this.subscription.add(authSub);
   }
 
@@ -75,32 +77,35 @@ export class AppLoginComponent implements OnInit, OnDestroy {
     this.customLoginLoading = true;
     this.errorMessage = '';
 
-    const loginSub = this.authService.customLogin(this.loginData.username, this.loginData.password).subscribe({
-      next: (response) => {
-        this.customLoginLoading = false;
-        console.log('Login successful:', response);
-        
-        // Give a small delay to ensure authentication status is updated
-        setTimeout(() => {
-          this.router.navigate(['/dashboard']);
-        }, 200);
-      },
-      error: (error) => {
-        this.customLoginLoading = false;
-        console.error('Login failed:', error);
-        
-        if (error.status === 404) {
-          this.errorMessage = 'User not found. Please sign up first.';
-        } else if (error.status === 401 || error.status === 403) {
-          this.errorMessage = 'Invalid credentials. Please try again.';
-        } else if (error.error && error.error.error) {
-          this.errorMessage = error.error.error;
-        } else {
-          this.errorMessage = 'Login failed. Please try again.';
-        }
-      }
-    });
-    
+    const loginSub = this.authService
+      .customLogin(this.loginData.username, this.loginData.password)
+      .subscribe({
+        next: (response) => {
+          this.customLoginLoading = false;
+          console.log('Login successful:', response);
+
+          // Give a small delay to ensure authentication status is updated
+          setTimeout(() => {
+            this.router.navigate(['/dashboard']);
+            // window.location.href = 'http://localhost:5050/dashboard';
+          }, 200);
+        },
+        error: (error) => {
+          this.customLoginLoading = false;
+          console.error('Login failed:', error);
+
+          if (error.status === 404) {
+            this.errorMessage = 'User not found. Please sign up first.';
+          } else if (error.status === 401 || error.status === 403) {
+            this.errorMessage = 'Invalid credentials. Please try again.';
+          } else if (error.error && error.error.error) {
+            this.errorMessage = error.error.error;
+          } else {
+            this.errorMessage = 'Login failed. Please try again.';
+          }
+        },
+      });
+
     this.subscription.add(loginSub);
   }
 
@@ -110,5 +115,6 @@ export class AppLoginComponent implements OnInit, OnDestroy {
 
   goToDashboard(): void {
     this.router.navigate(['/dashboard']);
+    // window.location.href = 'http://localhost:5050/dashboard';
   }
 }
