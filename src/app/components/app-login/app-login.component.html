@@ -1,80 +1,50 @@
-<div style="padding: 20px; max-width: 400px; margin: 50px auto; text-align: center; border: #0078d4;">
-  <h2>Login to Azure Auth Demo</h2>
-  
-  <div *ngIf="loading" style="margin: 20px 0;">
-    <p>Checking authentication status...</p>
+<div class="login-container">
+  <h2>Login to SSO Demo</h2>
+
+  <div *ngIf="loading" class="loading-msg">
+    Checking authentication status...
   </div>
-  
+
   <div *ngIf="!loading">
-    <p *ngIf="errorMessage" style="color: red; margin: 20px 0;">{{ errorMessage }}</p>
-    
+    <p *ngIf="errorMessage" class="error-msg">{{ errorMessage }}</p>
+
     <div *ngIf="!isAuthenticated">
-      <p>Please login to continue</p>
-      
+
       <!-- Custom Login Form -->
-      <div style="margin-bottom: 30px; text-align: left;">
-        <h3 style="text-align: center; margin-bottom: 20px;">Custom Login</h3>
+      <div class="login-card">
+        <h3>Custom Login</h3>
         <form (ngSubmit)="customLogin()" #loginForm="ngForm">
-          <div style="margin-bottom: 15px;">
-            <label for="email" style="display: block; margin-bottom: 5px; font-weight: bold;">Email:</label>
-            <input 
-              type="text" 
-              id="email"
-              name="email"
-              [(ngModel)]="loginData.username"
-              required
-              style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;"
-              placeholder="Enter your email">
+          <div class="form-group">
+            <label>Email:</label>
+            <input type="text" name="email" [(ngModel)]="loginData.username" required placeholder="Enter your email" />
           </div>
-          
-          <div style="margin-bottom: 20px;">
-            <label for="password" style="display: block; margin-bottom: 5px; font-weight: bold;">Password:</label>
-            <input 
-              type="password" 
-              id="password"
-              name="password"
-              [(ngModel)]="loginData.password"
-              required
-              style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;"
-              placeholder="Enter your password">
+
+          <div class="form-group">
+            <label>Password:</label>
+            <input type="password" name="password" [(ngModel)]="loginData.password" required
+              placeholder="Enter your password" />
           </div>
-          
-          <button 
-            type="submit"
-            [disabled]="!loginForm.form.valid || customLoginLoading"
-            style="width: 100%; padding: 12px; font-size: 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 10px;"
-            [style.background]="!loginForm.form.valid || customLoginLoading ? '#6c757d' : '#28a745'">
+
+          <button type="submit" [disabled]="!loginForm.form.valid || customLoginLoading">
             {{ customLoginLoading ? 'Logging in...' : 'Login' }}
           </button>
         </form>
-        
-        <button 
-          (click)="goToSignup()"
-          style="width: 100%; padding: 10px; font-size: 16px; background: #17a2b8; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px;">
-          Sign Up
-        </button>
+
+        <button class="signup-btn" (click)="goToSignup()">Sign Up</button>
       </div>
-      
-      <hr style="margin: 30px 0;">
-      
+
+      <div class="divider">OR</div>
+
       <!-- Azure AD Login -->
-      <div>
-        <h3 style="margin-bottom: 15px;">Or Login with Azure AD</h3>
-        <button 
-          (click)="login()" 
-          style="width: 100%; padding: 10px 20px; font-size: 16px; background: #0078d4; color: white; border: none; border-radius: 4px; cursor: pointer;">
-          Login with Azure AD
-        </button>
+      <div class="oauth-login">
+        <h3>Login with Azure AD</h3>
+        <button class="azure-btn" (click)="loginWithAzure()">Login with Azure AD</button>
       </div>
     </div>
-    
-    <div *ngIf="isAuthenticated">
+
+    <div *ngIf="isAuthenticated" class="already-login">
       <p>You are already logged in!</p>
-      <button 
-        (click)="goToDashboard()" 
-        style="padding: 10px 20px; font-size: 16px; background: #107c10; color: white; border: none; border-radius: 4px; cursor: pointer;">
-        Go to Dashboard
-      </button>
+      <button (click)="goToDashboard()">Go to Dashboard</button>
     </div>
   </div>
 </div>

@@ -1,22 +1,22 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { Subject, takeUntil } from 'rxjs';
-import { AuthServiceService } from '../../services/auth-service.service';
+import { Subject, takeUntil, switchMap, of } from 'rxjs';
+import { AuthServiceService, User } from '../../services/auth-service.service';
+import { FormsModule } from '@angular/forms';
+import { CommonModule } from '@angular/common';
+
 @Component({
-  selector: 'app-app-login',
-  standalone: true,
-  imports: [CommonModule, FormsModule],
+  selector: 'app-login',
   templateUrl: './app-login.component.html',
   styleUrls: ['./app-login.component.css'],
+  imports: [FormsModule, CommonModule],
 })
 export class AppLoginComponent implements OnInit, OnDestroy {
+  loginData = { username: '', password: '' };
   errorMessage = '';
   loading = true;
-  isAuthenticated = false;
   customLoginLoading = false;
-  loginData = { username: '', password: '' };
+  isAuthenticated = false;
 
   private destroy$ = new Subject<void>();
 
@@ -26,38 +26,21 @@ export class AppLoginComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    // Set error message if error param present
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('error')) {
-      this.errorMessage = 'Login failed. Please try again.';
-    }
+    this.authService.user$.pipe(takeUntil(this.destroy$)).subscribe((user) => {
+      this.loading = false;
+      this.isAuthenticated = user.authenticated;
 
-    // User auth subscription
-    this.authService.user$.pipe(takeUntil(this.destroy$)).subscribe({
-      next: (user) => {
-        console.log('Login component - user status:', user);
-        this.loading = false;
-        this.isAuthenticated = !!user?.authenticated;
-
-        if (this.isAuthenticated) {
-          this.navigateToDashboard();
-        }
-      },
-      error: (error) => {
-        console.error('Auth subscription error:', error);
-        this.loading = false;
-        this.isAuthenticated = false;
-      },
+      if (this.isAuthenticated && !user.user) {
+        // fetch profile only once
+        // this.authService.getUserProfile().subscribe();
+        this.router.navigate(['dashboard']);
+      }
     });
   }
 
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
-  }
-
-  login(): void {
-    this.authService.login();
   }
 
   customLogin(): void {
@@ -71,28 +54,29 @@ export class AppLoginComponent implements OnInit, OnDestroy {
 
     this.authService
       .customLogin(this.loginData.username, this.loginData.password)
-      .pipe(takeUntil(this.destroy$))
+      .pipe(
+        takeUntil(this.destroy$),
+        switchMap(() => this.authService.getUserProfile()) // fetch full user profile after login
+      )
       .subscribe({
-        next: (response) => {
+        next: () => {
           this.customLoginLoading = false;
-          setTimeout(() => this.navigateToDashboard(), 200);
+          this.router.navigate(['/dashboard']);
         },
-        error: (error) => {
+        error: (err) => {
           this.customLoginLoading = false;
-          console.error('Login failed:', error);
-
-          // Granular error logic
-          if (error.status === 404) {
-            this.errorMessage = 'User not found. Please sign up first.';
-          } else if (error.status === 401 || error.status === 403) {
-            this.errorMessage = 'Invalid credentials. Please try again.';
-          } else if (error.error?.error) {
-            this.errorMessage = error.error.error;
-          } else {
-            this.errorMessage = 'Login failed. Please try again.';
-          }
+          this.errorMessage =
+            err.status === 404
+              ? 'User not found'
+              : err.status === 401
+              ? 'Invalid credentials'
+              : 'Login failed';
         },
       });
+  }
+
+  loginWithAzure(): void {
+    this.authService.loginWithAzure();
   }
 
   goToSignup(): void {
@@ -100,12 +84,6 @@ export class AppLoginComponent implements OnInit, OnDestroy {
   }
 
   goToDashboard(): void {
-    this.navigateToDashboard();
-  }
-
-  private navigateToDashboard(): void {
     this.router.navigate(['/dashboard']);
-    // Optionally, uncomment if you want a hard reload (discouraged in SPA)
-    // window.location.href = 'http://localhost:5050/dashboard';
   }
 }
