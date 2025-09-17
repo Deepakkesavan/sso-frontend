@@ -39,7 +39,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     window.location.href = 'http://localhost:4200';
   }
   redirectToRRF(): void {
-    window.location.href = 'http://rrf.yourdomain.com';
+    window.location.href = 'http://localhost:4200';
   }
 
   getWelcomeMessage(): string {
